@@ -179,7 +179,7 @@ final class StreamdownBundleManager {
     }
     
     /// 生成指定 bundle 类型的 HTML
-    func generateHTML(for bundleType: StreamdownBundleType, initialMarkdown: String = "", isAnimating: Bool = false, enableScroll: Bool = true) -> String {
+    func generateHTML(for bundleType: StreamdownBundleType, initialMarkdown: String = "", isAnimating: Bool = false, enableScroll: Bool = true, autoScrollToBottom: Bool = false) -> String {
         let overflowStyle = enableScroll ? "auto" : "hidden"
         let escapedMarkdown = escapeForJS(initialMarkdown)
         
@@ -436,7 +436,7 @@ final class StreamdownBundleManager {
             <div id="root"></div>
             
             <script>
-                window.setInitialMarkdown && window.setInitialMarkdown(`\(escapedMarkdown)`, \(isAnimating));
+                window.setInitialMarkdown && window.setInitialMarkdown(`\(escapedMarkdown)`, \(isAnimating), \(autoScrollToBottom));
             </script>
             
             \(jsTag)

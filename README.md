@@ -70,24 +70,26 @@ struct MyApp: App {
 
 | Bundle | 大小 | 语法高亮 | 流式处理 | 数学/图表 |
 |--------|------|----------|----------|-----------|
-| `vanilla` | 168KB | highlight.js (25+ 语言) | 基础 | - |
+| `vanilla` | 174KB | highlight.js (25+ 语言) | 完整 (remend) | - |
 | `lite` | 179KB | - | 基础 | - |
-| `full` | 12MB | Shiki | 完整 | KaTeX/Mermaid |
+| `full` | 12MB | Shiki | 完整 (分块+memo) | KaTeX/Mermaid |
 
 ### 如何选择？
 
 **Vanilla（推荐大多数应用）**
 - 体积和功能的最佳平衡
 - 支持 25+ 种语言的语法高亮
+- 完整流式支持：自动补全未闭合的 Markdown（通过 remend）
 - 加载快速，适合聊天应用
 
 **Lite（最小体积）**
 - 无语法高亮
+- 基础流式支持（不处理未闭合语法）
 - 不需要代码块高亮时使用
 
 **Full（功能完整）**
 - 需要数学公式（`$x^2$`）或图表（```mermaid）时使用
-- 真正的流式支持：自动补全未闭合的 Markdown
+- 分块渲染 + React memo 优化，长文档性能更好
 - 体积较大（12MB），按需使用
 
 ### 指定 Bundle 类型
@@ -165,7 +167,7 @@ struct ChatMessageView: View {
 
 ## 流式模式
 
-对于 AI 流式输出场景，使用 `isAnimating: true`：
+对于 AI 流式输出场景，使用 `isAnimating: true` 和 `autoScrollToBottom: true`：
 
 ```swift
 struct StreamingView: View {
@@ -175,9 +177,10 @@ struct StreamingView: View {
     var body: some View {
         StreamdownWebView(
             markdown: content,
-            isAnimating: isStreaming,  // 优化频繁更新
+            isAnimating: isStreaming,       // 启用流式处理（自动补全未闭合语法）
             theme: .auto,
-            bundleType: .vanilla
+            bundleType: .vanilla,
+            autoScrollToBottom: true        // 自动滚动到底部
         )
     }
     
@@ -186,6 +189,11 @@ struct StreamingView: View {
     }
 }
 ```
+
+### 流式模式特性
+
+- **`isAnimating: true`** - 启用 remend 库自动补全未闭合的 Markdown 语法（如 `**bold` → `**bold**`）
+- **`autoScrollToBottom: true`** - 内容更新时自动滚动到底部，适合聊天场景
 
 ---
 
@@ -199,7 +207,8 @@ StreamdownWebView(
     markdown: String,
     isAnimating: Bool = false,
     theme: StreamdownTheme = .auto,
-    bundleType: StreamdownBundleType = .vanilla
+    bundleType: StreamdownBundleType = .vanilla,
+    autoScrollToBottom: Bool = false    // 流式输出时自动滚动到底部
 )
 
 // 嵌入模式（用于混合布局，禁用内部滚动）
@@ -208,19 +217,35 @@ StreamdownWebView(
     isAnimating: Bool = false,
     theme: StreamdownTheme = .auto,
     bundleType: StreamdownBundleType = .vanilla,
+    autoScrollToBottom: Bool = false,
     contentHeight: Binding<CGFloat>
 )
 
-// 完整控制
+// 完整控制（含链接点击回调）
 StreamdownWebView(
     markdown: String,
     isAnimating: Bool = false,
     theme: StreamdownTheme = .auto,
     bundleType: StreamdownBundleType = .vanilla,
-    contentHeight: Binding<CGFloat>,
-    isReady: Binding<Bool>
+    autoScrollToBottom: Bool = false,
+    contentHeight: Binding<CGFloat>?,
+    isReady: Binding<Bool>?,
+    onLinkTap: ((URL) -> Void)?         // 链接点击回调
 )
 ```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `markdown` | `String` | - | Markdown 内容 |
+| `isAnimating` | `Bool` | `false` | 流式模式，启用 remend 自动补全未闭合语法 |
+| `theme` | `StreamdownTheme` | `.auto` | 主题：`.light`、`.dark`、`.auto` |
+| `bundleType` | `StreamdownBundleType` | `.vanilla` | Bundle 类型 |
+| `autoScrollToBottom` | `Bool` | `false` | 内容更新时自动滚动到底部 |
+| `contentHeight` | `Binding<CGFloat>?` | `nil` | 报告内容高度，用于混合布局 |
+| `isReady` | `Binding<Bool>?` | `nil` | WebView 准备就绪回调 |
+| `onLinkTap` | `((URL) -> Void)?` | `nil` | 链接点击回调 |
 
 ### StreamdownTheme
 

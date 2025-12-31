@@ -15,9 +15,14 @@ struct StreamdownWebView: UIViewRepresentable {
     var theme: StreamdownTheme = .auto
     var bundleType: StreamdownBundleType = .vanilla
     var enableScroll: Bool = true
+    var autoScrollToBottom: Bool = false
     @Binding var contentHeight: CGFloat
     @Binding var isReady: Bool
-    
+
+    /// 链接点击回调，返回被点击的 URL
+    /// 如果设置了此回调，链接点击将被拦截，不会在 WebView 内部导航
+    var onLinkTap: ((URL) -> Void)? = nil
+
     enum StreamdownTheme: String {
         case light = "light"
         case dark = "dark"
@@ -25,36 +30,42 @@ struct StreamdownWebView: UIViewRepresentable {
     }
     
     // 独立模式（启用滚动）
-    init(markdown: String, isAnimating: Bool = false, theme: StreamdownTheme = .auto, bundleType: StreamdownBundleType = .vanilla) {
+    init(markdown: String, isAnimating: Bool = false, theme: StreamdownTheme = .auto, bundleType: StreamdownBundleType = .vanilla, autoScrollToBottom: Bool = false, onLinkTap: ((URL) -> Void)? = nil) {
         self.markdown = markdown
         self.isAnimating = isAnimating
         self.theme = theme
         self.bundleType = bundleType
         self.enableScroll = true
+        self.autoScrollToBottom = autoScrollToBottom
         self._contentHeight = .constant(0)
         self._isReady = .constant(false)
+        self.onLinkTap = onLinkTap
     }
-    
+
     // 嵌入模式（禁用滚动，提供高度绑定）
-    init(markdown: String, isAnimating: Bool = false, theme: StreamdownTheme = .auto, bundleType: StreamdownBundleType = .vanilla, contentHeight: Binding<CGFloat>) {
+    init(markdown: String, isAnimating: Bool = false, theme: StreamdownTheme = .auto, bundleType: StreamdownBundleType = .vanilla, contentHeight: Binding<CGFloat>, autoScrollToBottom: Bool = false, onLinkTap: ((URL) -> Void)? = nil) {
         self.markdown = markdown
         self.isAnimating = isAnimating
         self.theme = theme
         self.bundleType = bundleType
         self.enableScroll = false
+        self.autoScrollToBottom = autoScrollToBottom
         self._contentHeight = contentHeight
         self._isReady = .constant(false)
+        self.onLinkTap = onLinkTap
     }
-    
+
     // 完整模式
-    init(markdown: String, isAnimating: Bool = false, theme: StreamdownTheme = .auto, bundleType: StreamdownBundleType = .vanilla, contentHeight: Binding<CGFloat>, isReady: Binding<Bool>) {
+    init(markdown: String, isAnimating: Bool = false, theme: StreamdownTheme = .auto, bundleType: StreamdownBundleType = .vanilla, contentHeight: Binding<CGFloat>, isReady: Binding<Bool>, autoScrollToBottom: Bool = false, onLinkTap: ((URL) -> Void)? = nil) {
         self.markdown = markdown
         self.isAnimating = isAnimating
         self.theme = theme
         self.bundleType = bundleType
         self.enableScroll = false
+        self.autoScrollToBottom = autoScrollToBottom
         self._contentHeight = contentHeight
         self._isReady = isReady
+        self.onLinkTap = onLinkTap
     }
     
     func makeUIView(context: Context) -> WKWebView {
@@ -68,10 +79,11 @@ struct StreamdownWebView: UIViewRepresentable {
             context.coordinator.isPageReady = true  // 预热的 WebView 已经加载好 JS
             context.coordinator.pendingMarkdown = markdown
             context.coordinator.pendingIsAnimating = isAnimating
+            context.coordinator.pendingAutoScroll = autoScrollToBottom
             
             // 立即更新内容
             let escapedMarkdown = escapeForJS(markdown)
-            let script = "if(typeof window.updateMarkdown === 'function') { window.updateMarkdown(`\(escapedMarkdown)`, \(isAnimating)); }"
+            let script = "if(typeof window.updateMarkdown === 'function') { window.updateMarkdown(`\(escapedMarkdown)`, \(isAnimating), \(autoScrollToBottom)); }"
             prewarmedWebView.evaluateJavaScript(script) { _, _ in
                 // 请求高度更新
                 context.coordinator.requestHeight(webView: prewarmedWebView)
@@ -89,41 +101,49 @@ struct StreamdownWebView: UIViewRepresentable {
         let contentController = webView.configuration.userContentController
         contentController.add(context.coordinator, name: "heightChanged")
         contentController.add(context.coordinator, name: "contentReady")
-        
+        contentController.add(context.coordinator, name: "scrollToBottom")
+
         webView.scrollView.isScrollEnabled = enableScroll
         webView.navigationDelegate = context.coordinator
+
+        // 传递链接点击回调
+        context.coordinator.onLinkTap = onLinkTap
     }
     
     private func createNewWebView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
-        
+
         let contentController = configuration.userContentController
         contentController.add(context.coordinator, name: "heightChanged")
         contentController.add(context.coordinator, name: "contentReady")
-        
+        contentController.add(context.coordinator, name: "scrollToBottom")
+
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.isScrollEnabled = enableScroll
         webView.navigationDelegate = context.coordinator
-        
+
         context.coordinator.webView = webView
         context.coordinator.pendingMarkdown = markdown
         context.coordinator.pendingIsAnimating = isAnimating
+        context.coordinator.pendingAutoScroll = autoScrollToBottom
         context.coordinator.bundleType = bundleType
-        
+        context.coordinator.onLinkTap = onLinkTap
+
         // 加载 HTML
         let bundleManager = StreamdownBundleManager.shared
         let html = bundleManager.generateHTML(
             for: bundleType,
             initialMarkdown: markdown,
             isAnimating: isAnimating,
-            enableScroll: enableScroll
+            enableScroll: enableScroll,
+            autoScrollToBottom: autoScrollToBottom
         )
         webView.loadHTMLString(html, baseURL: bundleManager.getBaseURL())
-        
+
         return webView
     }
     
@@ -131,14 +151,15 @@ struct StreamdownWebView: UIViewRepresentable {
         guard context.coordinator.isPageReady else {
             context.coordinator.pendingMarkdown = markdown
             context.coordinator.pendingIsAnimating = isAnimating
+            context.coordinator.pendingAutoScroll = autoScrollToBottom
             return
         }
         
         let escapedMarkdown = escapeForJS(markdown)
-        let script = "if(typeof window.updateMarkdown === 'function') { window.updateMarkdown(`\(escapedMarkdown)`, \(isAnimating)); }"
+        let script = "if(typeof window.updateMarkdown === 'function') { window.updateMarkdown(`\(escapedMarkdown)`, \(isAnimating), \(autoScrollToBottom)); }"
         webView.evaluateJavaScript(script) { _, error in
             if let error = error {
-                print("JavaScript error: \(error)")
+                print("[StreamdownWebView] JavaScript error: \(error)")
             }
         }
     }
@@ -147,6 +168,7 @@ struct StreamdownWebView: UIViewRepresentable {
         let contentController = webView.configuration.userContentController
         contentController.removeScriptMessageHandler(forName: "heightChanged")
         contentController.removeScriptMessageHandler(forName: "contentReady")
+        contentController.removeScriptMessageHandler(forName: "scrollToBottom")
     }
     
     func makeCoordinator() -> Coordinator {
@@ -166,11 +188,15 @@ struct StreamdownWebView: UIViewRepresentable {
         var isPageReady = false
         var pendingMarkdown: String?
         var pendingIsAnimating: Bool = false
+        var pendingAutoScroll: Bool = false
         var bundleType: StreamdownBundleType = .vanilla
         weak var webView: WKWebView?
         var heightBinding: Binding<CGFloat>
         var isReadyBinding: Binding<Bool>
-        
+
+        /// 链接点击回调
+        var onLinkTap: ((URL) -> Void)?
+
         init(heightBinding: Binding<CGFloat>, isReadyBinding: Binding<Bool>) {
             self.heightBinding = heightBinding
             self.isReadyBinding = isReadyBinding
@@ -192,13 +218,73 @@ struct StreamdownWebView: UIViewRepresentable {
                 DispatchQueue.main.async {
                     self.isReadyBinding.wrappedValue = true
                 }
+            } else if message.name == "scrollToBottom" {
+                // 滚动到底部 - 由 Swift 控制 UIScrollView
+                // Scroll to bottom - controlled by Swift via UIScrollView
+                DispatchQueue.main.async {
+                    guard let webView = self.webView else { return }
+                    let scrollView = webView.scrollView
+                    let bottomOffset = CGPoint(
+                        x: 0,
+                        y: max(0, scrollView.contentSize.height - scrollView.bounds.height + scrollView.contentInset.bottom)
+                    )
+                    scrollView.setContentOffset(bottomOffset, animated: false)
+                }
             }
         }
         
         // MARK: - WKNavigationDelegate
-        
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             checkPageReady(webView: webView, attempts: 0)
+        }
+
+        // MARK: - Navigation Policy (链接拦截)
+
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+
+            let url = navigationAction.request.url
+
+            // 1. 允许初始 HTML 加载（loadHTMLString 触发）
+            if navigationAction.navigationType == .other {
+                decisionHandler(.allow)
+                return
+            }
+
+            // 2. 拦截用户点击的链接
+            if navigationAction.navigationType == .linkActivated,
+               let url = url,
+               let onLinkTap = onLinkTap {
+                DispatchQueue.main.async {
+                    onLinkTap(url)
+                }
+                decisionHandler(.cancel)
+                return
+            }
+
+            // 3. 其他情况：允许导航（保持默认行为）
+            decisionHandler(.allow)
+        }
+
+        /// 处理 target="_blank" 链接
+        func webView(_ webView: WKWebView,
+                     createWebViewWith configuration: WKWebViewConfiguration,
+                     for navigationAction: WKNavigationAction,
+                     windowFeatures: WKWindowFeatures) -> WKWebView? {
+
+            // 拦截 target="_blank" 链接
+            if navigationAction.targetFrame == nil,
+               let url = navigationAction.request.url,
+               let onLinkTap = onLinkTap {
+                DispatchQueue.main.async {
+                    onLinkTap(url)
+                }
+            }
+
+            // 返回 nil 阻止创建新 WebView
+            return nil
         }
         
         private func checkPageReady(webView: WKWebView, attempts: Int) {
@@ -235,7 +321,7 @@ struct StreamdownWebView: UIViewRepresentable {
                 .replacingOccurrences(of: "\n", with: "\\n")
                 .replacingOccurrences(of: "\r", with: "\\r")
             
-            let script = "if(typeof window.updateMarkdown === 'function') { window.updateMarkdown(`\(escapedMarkdown)`, \(pendingIsAnimating)); }"
+            let script = "if(typeof window.updateMarkdown === 'function') { window.updateMarkdown(`\(escapedMarkdown)`, \(pendingIsAnimating), \(pendingAutoScroll)); }"
             webView.evaluateJavaScript(script, completionHandler: nil)
         }
         
@@ -308,6 +394,27 @@ struct StreamdownWebView: UIViewRepresentable {
             notifyContentReady()
         }
     }
+}
+
+// MARK: - SafariView
+
+import SafariServices
+
+/// A SwiftUI wrapper for SFSafariViewController
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let config = SFSafariViewController.Configuration()
+        config.entersReaderIfAvailable = false
+        config.barCollapsingEnabled = true
+
+        let safari = SFSafariViewController(url: url, configuration: config)
+        safari.preferredControlTintColor = .systemBlue
+        return safari
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
 #Preview {

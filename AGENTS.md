@@ -25,7 +25,7 @@ MarkdownDemo/
 ### iOS App (Xcode)
 ```bash
 # Build for simulator
-xcodebuild -project MarkdownDemo.xcodeproj -scheme MarkdownDemo -destination 'platform=iOS Simulator,name=iPhone 16' build
+xcodebuild -project MarkdownDemo.xcodeproj -scheme MarkdownDemo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 
 # Build for device (requires signing)
 xcodebuild -project MarkdownDemo.xcodeproj -scheme MarkdownDemo -destination 'generic/platform=iOS' build
@@ -127,8 +127,8 @@ print("[StreamdownWebView] Error: \(error)")
 #### Access Control
 ```swift
 // Use final class for singletons
-final class StreamdownWebViewPool {
-    static let shared = StreamdownWebViewPool()
+final class StreamdownBundleManager {
+    static let shared = StreamdownBundleManager()
     private init() { }
     
     // Use private for implementation details
@@ -207,7 +207,7 @@ requestAnimationFrame(() => {
 ## Architecture Notes
 
 ### WebView Pool Pattern
-- `StreamdownWebViewPool` pre-warms WebViews at app launch
+- `StreamdownBundleManager` pre-warms WebViews at app launch
 - Shared `WKProcessPool` reduces memory usage
 - JS/CSS resources are cached to avoid repeated file I/O
 
@@ -227,10 +227,11 @@ Used in `StreamdownWebView` for WKWebView delegate handling:
 
 | File | Purpose |
 |------|---------|
-| `MarkdownDemoApp.swift` | App entry, pool warmup |
+| `MarkdownDemoApp.swift` | App entry, WebView warmup |
 | `StreamdownWebView.swift` | WKWebView wrapper |
-| `StreamdownWebViewPool.swift` | WebView prewarming |
-| `streamdown-web/src/index-vanilla.js` | Preferred JS bundle |
+| `StreamdownBundleManager.swift` | Bundle management + WebView pool |
+| `BundleDemoView.swift` | All demo content views |
+| `streamdown-web/src/index-vanilla.js` | Preferred JS bundle source |
 
 ---
 

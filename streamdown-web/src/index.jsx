@@ -5,6 +5,7 @@ import { Streamdown } from 'streamdown';
 // Global state
 let currentMarkdown = '';
 let currentIsAnimating = false;
+let autoScrollEnabled = false;
 let root = null;
 let resizeObserver = null;
 
@@ -14,6 +15,16 @@ function sendHeightToSwift(height) {
         window.webkit.messageHandlers.heightChanged.postMessage({
             height: height
         });
+    }
+}
+
+// Scroll to bottom - request Swift to scroll via UIScrollView
+// Note: JavaScript scrolling doesn't work in WKWebView, must use native scroll
+function scrollToBottom() {
+    if (autoScrollEnabled && currentIsAnimating) {
+        if (window.webkit?.messageHandlers?.scrollToBottom) {
+            window.webkit.messageHandlers.scrollToBottom.postMessage({});
+        }
     }
 }
 
@@ -86,20 +97,32 @@ function render() {
     setTimeout(() => {
         const height = document.body.scrollHeight;
         sendHeightToSwift(height);
+        scrollToBottom();
     }, 50);
 }
 
 // Update function - called from Swift
-window.updateMarkdown = function(markdown, isAnimating) {
+window.updateMarkdown = function(markdown, isAnimating, autoScroll) {
     currentMarkdown = markdown;
     currentIsAnimating = isAnimating;
+    if (autoScroll !== undefined) {
+        autoScrollEnabled = autoScroll;
+    }
     render();
 };
 
 // Set initial markdown - called from Swift before init
-window.setInitialMarkdown = function(markdown, isAnimating) {
+window.setInitialMarkdown = function(markdown, isAnimating, autoScroll) {
     currentMarkdown = markdown;
     currentIsAnimating = isAnimating;
+    if (autoScroll !== undefined) {
+        autoScrollEnabled = autoScroll;
+    }
+};
+
+// Set auto scroll
+window.setAutoScroll = function(enabled) {
+    autoScrollEnabled = enabled;
 };
 
 // Get current content height - can be called from Swift

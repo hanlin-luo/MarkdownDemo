@@ -164,7 +164,8 @@ struct StreamingDemoContent: View {
                 markdown: displayedMarkdown,
                 isAnimating: isStreaming,
                 theme: .auto,
-                bundleType: bundleType
+                bundleType: bundleType,
+                autoScrollToBottom: true
             )
         }
         .navigationTitle("Streaming Demo")
@@ -233,9 +234,10 @@ struct CodeBlocksDemoContent: View {
 
 struct MixedLayoutDemoContent: View {
     let bundleType: StreamdownBundleType
-    
+
     @State private var webViewHeight: CGFloat = 100
-    
+    @State private var selectedURL: IdentifiableURL?
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -245,13 +247,16 @@ struct MixedLayoutDemoContent: View {
                     isAnimating: false,
                     theme: .auto,
                     bundleType: bundleType,
-                    contentHeight: $webViewHeight
+                    contentHeight: $webViewHeight,
+                    onLinkTap: { url in
+                        handleURL(url)
+                    }
                 )
                 .frame(height: max(webViewHeight, 100))
-                
+
                 Divider()
                     .padding(.top, 16)
-                
+
                 // 底部信息区域 - 原生 SwiftUI 组件
                 VStack(spacing: 12) {
                     // 标签组
@@ -270,19 +275,19 @@ struct MixedLayoutDemoContent: View {
                         }
                         .padding(.horizontal, 16)
                     }
-                    
+
                     // 操作按钮
                     HStack(spacing: 16) {
                         Button(action: {}) {
                             Label("Copy", systemImage: "doc.on.doc")
                         }
                         .buttonStyle(.bordered)
-                        
+
                         Button(action: {}) {
                             Label("Share", systemImage: "square.and.arrow.up")
                         }
                         .buttonStyle(.bordered)
-                        
+
                         Spacer()
                     }
                     .padding(.horizontal, 16)
@@ -292,7 +297,31 @@ struct MixedLayoutDemoContent: View {
         }
         .navigationTitle("Mixed Layout")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedURL) { item in
+            SafariView(url: item.url)
+        }
     }
+
+    private func handleURL(_ url: URL) {
+        switch url.scheme?.lowercased() {
+        case "http", "https":
+            selectedURL = IdentifiableURL(url: url)
+        case "mailto", "tel", "sms":
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+            }
+        default:
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+            }
+        }
+    }
+}
+
+/// URL wrapper for sheet(item:)
+struct IdentifiableURL: Identifiable {
+    let id = UUID()
+    let url: URL
 }
 
 // MARK: - Demo Markdown Data
@@ -481,9 +510,9 @@ enum DemoMarkdownData {
     
     static let mixedLayout = """
     # AI 助手回复
-    
-    您好！这是混合布局演示，展示 Markdown 内容与原生 SwiftUI 组件的结合。
-    
+
+    您好！这是混合布局演示，展示 Markdown 内容与原生 SwiftUI 组件的结合。更多信息请访问 [Streamdown](https://streamdown.ai)。
+
     ## 核心要点
     
     1. **性能优化** - 减少不必要的渲染
@@ -511,7 +540,7 @@ enum DemoMarkdownData {
     | 优化前 | 120ms | 45MB |
     | 优化后 | 35ms | 28MB |
     
-    > **提示**: 下方的标签和按钮是原生 SwiftUI 组件，与 WebView 混合布局。
+    > **提示**: 下方的标签和按钮是原生 SwiftUI 组件，与 WebView 混合布局。点击上方链接可在 Sheet 中打开。
     """
 }
 

@@ -397,12 +397,12 @@ struct WebViewSheet: View {
 
 ## 实现清单
 
-- [ ] 在 `StreamdownWebView` 添加 `onLinkTap` 属性
-- [ ] 在 `Coordinator` 添加 `onLinkTap` 属性并传递
-- [ ] 实现 `decidePolicyFor` 方法
-- [ ] 实现 `createWebViewWith` 方法（处理 target="_blank"）
-- [ ] 添加 URL scheme 分类处理
-- [ ] 添加锚点链接判断逻辑
-- [ ] 创建 `SafariView` 封装
-- [ ] 更新各 Demo View 的调用方式
+- [x] 在 `StreamdownWebView` 添加 `onLinkTap` 属性
+- [x] 在 `Coordinator` 添加 `onLinkTap` 属性并传递
+- [x] 实现 `decidePolicyFor` 方法
+- [x] 实现 `createWebViewWith` 方法（处理 target="_blank"）
+- [x] 添加 URL scheme 分类处理
+- [x] 添加锚点链接判断逻辑
+- [x] 创建 `SafariView` 封装
+- [x] 更新各 Demo View 的调用方式
 - [ ] 添加测试用例

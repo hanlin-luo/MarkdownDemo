@@ -1,11 +1,13 @@
 /**
  * Streamdown Vanilla - 轻量版 Markdown 渲染器
- * 不使用 React，纯 JavaScript + marked + highlight.js
- * 目标：< 100KB bundle size (with syntax highlighting)
+ * 不使用 React，纯 JavaScript + marked + highlight.js + remend
+ * 支持流式渲染时自动补全未闭合的 Markdown 语法
+ * 目标：< 200KB bundle size (with syntax highlighting)
  */
 
 import { marked } from 'marked';
 import hljs from 'highlight.js/lib/core';
+import remend from 'remend';
 
 // 只导入常用语言以减小 bundle 大小
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -136,6 +138,8 @@ marked.setOptions({
 
 // 全局状态
 let currentMarkdown = '';
+let currentIsAnimating = false;
+let autoScrollEnabled = false;
 let rootElement = null;
 let resizeObserver = null;
 let mutationObserver = null;
@@ -151,6 +155,17 @@ function sendHeightToSwift(height) {
 function sendContentReady() {
     if (window.webkit?.messageHandlers?.contentReady) {
         window.webkit.messageHandlers.contentReady.postMessage({});
+    }
+}
+
+// 滚动到底部
+// Scroll to bottom - request Swift to scroll via UIScrollView
+// Note: JavaScript scrolling doesn't work in WKWebView, must use native scroll
+function scrollToBottom() {
+    if (autoScrollEnabled && currentIsAnimating) {
+        if (window.webkit?.messageHandlers?.scrollToBottom) {
+            window.webkit.messageHandlers.scrollToBottom.postMessage({});
+        }
     }
 }
 
@@ -183,7 +198,13 @@ function render() {
     if (!rootElement) return;
     
     try {
-        const html = marked.parse(currentMarkdown || '');
+        // 流式输入时，使用 remend 自动补全未闭合的 Markdown 语法
+        // Streaming mode: use remend to auto-complete unclosed Markdown syntax
+        const processedMarkdown = currentIsAnimating 
+            ? remend(currentMarkdown || '')
+            : (currentMarkdown || '');
+        
+        const html = marked.parse(processedMarkdown);
         rootElement.innerHTML = html;
     } catch (e) {
         console.error('Markdown parse error:', e);
@@ -193,6 +214,7 @@ function render() {
     // 立即发送高度（不等待观察器）
     requestAnimationFrame(() => {
         sendHeightToSwift(document.body.scrollHeight);
+        scrollToBottom();
     });
 }
 
@@ -218,14 +240,28 @@ function init() {
 // === 暴露给 Swift 的 API ===
 
 // 更新 Markdown 内容
-window.updateMarkdown = function(markdown, isAnimating) {
+window.updateMarkdown = function(markdown, isAnimating, autoScroll) {
     currentMarkdown = markdown;
+    currentIsAnimating = isAnimating;
+    if (autoScroll !== undefined) {
+        autoScrollEnabled = autoScroll;
+    }
     render();
 };
 
 // 设置初始 Markdown（在 init 之前调用）
-window.setInitialMarkdown = function(markdown, isAnimating) {
+window.setInitialMarkdown = function(markdown, isAnimating, autoScroll) {
     currentMarkdown = markdown;
+    currentIsAnimating = isAnimating;
+    if (autoScroll !== undefined) {
+        autoScrollEnabled = autoScroll;
+    }
+};
+
+// 设置自动滚动开关
+// Enable or disable auto-scroll to bottom
+window.setAutoScroll = function(enabled) {
+    autoScrollEnabled = enabled;
 };
 
 // 获取当前内容高度
