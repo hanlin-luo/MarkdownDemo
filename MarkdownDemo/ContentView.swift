@@ -7,91 +7,31 @@
 
 import SwiftUI
 
+/// 主视图：TabView 展示不同 bundle 类型
+/// Main view: TabView showing different bundle types
 struct ContentView: View {
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    NavigationLink {
-                        BasicMarkdownDemoView()
-                    } label: {
-                        DemoRowView(
-                            icon: "doc.text",
-                            iconColor: .blue,
-                            title: "Basic Markdown",
-                            description: "Headers, lists, tables, links, and more"
-                        )
-                    }
-                    
-                    NavigationLink {
-                        StreamingDemoView()
-                    } label: {
-                        DemoRowView(
-                            icon: "waveform",
-                            iconColor: .green,
-                            title: "Streaming Demo",
-                            description: "Simulate AI streaming with incomplete Markdown"
-                        )
-                    }
-                    
-                    NavigationLink {
-                        CodeBlocksDemoView()
-                    } label: {
-                        DemoRowView(
-                            icon: "chevron.left.forwardslash.chevron.right",
-                            iconColor: .purple,
-                            title: "Code Blocks",
-                            description: "Syntax highlighting for multiple languages"
-                        )
-                    }
-                    
-                    NavigationLink {
-                        MixedLayoutDemoView()
-                    } label: {
-                        DemoRowView(
-                            icon: "rectangle.split.3x1",
-                            iconColor: .orange,
-                            title: "Mixed Layout",
-                            description: "Markdown with native SwiftUI components"
-                        )
-                    }
-                } header: {
-                    Text("Demos")
-                } footer: {
-                    Text("Powered by Streamdown - a React library for streaming Markdown, integrated via WKWebView.")
+        TabView {
+            BundleDemoView(bundleType: .vanilla)
+                .tabItem {
+                    Label("Vanilla", systemImage: "hare")
                 }
-                
-                Section {
-                    Link(destination: URL(string: "https://streamdown.ai")!) {
-                        HStack {
-                            Image(systemName: "link")
-                                .foregroundStyle(.blue)
-                            Text("Streamdown Website")
-                            Spacer()
-                            Image(systemName: "arrow.up.right.square")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    
-                    Link(destination: URL(string: "https://github.com/vercel/streamdown")!) {
-                        HStack {
-                            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                .foregroundStyle(.gray)
-                            Text("GitHub Repository")
-                            Spacer()
-                            Image(systemName: "arrow.up.right.square")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } header: {
-                    Text("Resources")
+            
+            BundleDemoView(bundleType: .lite)
+                .tabItem {
+                    Label("Lite", systemImage: "leaf")
                 }
-            }
-            .navigationTitle("Streamdown Demo")
+            
+            BundleDemoView(bundleType: .full)
+                .tabItem {
+                    Label("Full", systemImage: "cube.box")
+                }
         }
     }
 }
 
+/// 演示行视图
+/// Demo row view for navigation lists
 struct DemoRowView: View {
     let icon: String
     let iconColor: Color
