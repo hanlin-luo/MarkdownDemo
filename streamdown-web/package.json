@@ -1,0 +1,20 @@
+{
+  "name": "streamdown-bundle",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/index.jsx --bundle --minify --format=iife --global-name=StreamdownApp --outfile=dist/streamdown-bundle.js --loader:.jsx=jsx --loader:.woff2=dataurl --loader:.woff=dataurl --loader:.ttf=dataurl --loader:.css=css --jsx=automatic --jsx-import-source=react",
+    "build:lite": "esbuild src/index-lite.jsx --bundle --minify --format=iife --global-name=StreamdownApp --outfile=dist/streamdown-lite.js --loader:.jsx=jsx --jsx=automatic --jsx-import-source=react",
+    "build:vanilla": "esbuild src/index-vanilla.js --bundle --minify --format=iife --global-name=StreamdownApp --outfile=dist/streamdown-vanilla.js",
+    "build:dev": "esbuild src/index.jsx --bundle --format=iife --global-name=StreamdownApp --outfile=dist/streamdown-bundle.js --loader:.jsx=jsx --loader:.woff2=dataurl --loader:.woff=dataurl --loader:.ttf=dataurl --loader:.css=css --jsx=automatic --jsx-import-source=react --sourcemap"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "streamdown": "^1.6.10",
+    "marked": "^16.2.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
