@@ -9,10 +9,11 @@
     "build:dev": "esbuild src/index.jsx --bundle --format=iife --global-name=StreamdownApp --outfile=dist/streamdown-bundle.js --loader:.jsx=jsx --loader:.woff2=dataurl --loader:.woff=dataurl --loader:.ttf=dataurl --loader:.css=css --jsx=automatic --jsx-import-source=react --sourcemap"
   },
   "dependencies": {
+    "highlight.js": "^11.11.1",
+    "marked": "^16.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "streamdown": "^1.6.10",
-    "marked": "^16.2.1"
+    "streamdown": "^1.6.10"
   },
   "devDependencies": {
     "esbuild": "^0.24.0"

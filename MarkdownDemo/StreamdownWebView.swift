@@ -190,27 +190,19 @@ struct StreamdownWebView: UIViewRepresentable {
         let themeMode = theme.rawValue
         let escapedMarkdown = escapeForJS(initialMarkdown)
         
-        // 使用 Pool 缓存的资源，避免重复读取文件
+        // 使用 Pool 缓存的 JS 资源
         let pool = StreamdownWebViewPool.shared
         let bundledJS = pool.getCachedJS()
-        let bundledCSS = pool.getCachedCSS()
         
         let jsTag: String
-        let cssTag: String
-        
         if let js = bundledJS {
             jsTag = "<script>\(js)</script>"
         } else {
             jsTag = "<script src=\"streamdown-bundle.js\"></script>"
         }
         
-        // vanilla/lite 版本不需要外部 CSS（使用内联样式）
-        // 只有完整版本才需要加载 1.4MB 的 CSS
-        if let css = bundledCSS {
-            cssTag = "<style>\(css)</style>"
-        } else {
-            cssTag = "" // 跳过外部 CSS，使用下面的内联样式
-        }
+        // 初始 HTML 只包含内联基础样式，增强 CSS 将通过 JavaScript 延迟注入
+        // 这样可以快速显示内容，然后异步加载丰富样式
         
         return """
         <!DOCTYPE html>
@@ -219,8 +211,6 @@ struct StreamdownWebView: UIViewRepresentable {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <title>Streamdown</title>
-            
-            \(cssTag)
             
             <style>
                 * {
@@ -316,6 +306,42 @@ struct StreamdownWebView: UIViewRepresentable {
                 #root pre code {
                     background: transparent;
                     padding: 0;
+                }
+                
+                /* highlight.js theme - GitHub-like */
+                .hljs { display: block; overflow-x: auto; color: #24292e; }
+                .hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }
+                .hljs-keyword, .hljs-selector-tag { color: #d73a49; font-weight: 600; }
+                .hljs-literal, .hljs-number, .hljs-tag .hljs-attr { color: #005cc5; }
+                .hljs-string, .hljs-doctag, .hljs-regexp { color: #032f62; }
+                .hljs-title, .hljs-section, .hljs-selector-id { color: #6f42c1; font-weight: 600; }
+                .hljs-subst { color: #24292e; font-weight: normal; }
+                .hljs-type, .hljs-class .hljs-title { color: #6f42c1; }
+                .hljs-variable, .hljs-template-variable { color: #e36209; }
+                .hljs-name, .hljs-attribute { color: #22863a; }
+                .hljs-symbol, .hljs-bullet, .hljs-link { color: #005cc5; }
+                .hljs-built_in, .hljs-builtin-name { color: #005cc5; }
+                .hljs-meta { color: #6a737d; font-weight: 600; }
+                .hljs-deletion { background: #ffeef0; color: #b31d28; }
+                .hljs-addition { background: #e6ffed; color: #22863a; }
+                .hljs-emphasis { font-style: italic; }
+                .hljs-strong { font-weight: bold; }
+                @media (prefers-color-scheme: dark) {
+                    .hljs { color: #c9d1d9; }
+                    .hljs-comment, .hljs-quote { color: #8b949e; }
+                    .hljs-keyword, .hljs-selector-tag { color: #ff7b72; }
+                    .hljs-literal, .hljs-number, .hljs-tag .hljs-attr { color: #79c0ff; }
+                    .hljs-string, .hljs-doctag, .hljs-regexp { color: #a5d6ff; }
+                    .hljs-title, .hljs-section, .hljs-selector-id { color: #d2a8ff; }
+                    .hljs-subst { color: #c9d1d9; }
+                    .hljs-type, .hljs-class .hljs-title { color: #d2a8ff; }
+                    .hljs-variable, .hljs-template-variable { color: #ffa657; }
+                    .hljs-name, .hljs-attribute { color: #7ee787; }
+                    .hljs-symbol, .hljs-bullet, .hljs-link { color: #79c0ff; }
+                    .hljs-built_in, .hljs-builtin-name { color: #79c0ff; }
+                    .hljs-meta { color: #8b949e; }
+                    .hljs-deletion { background: #490202; color: #ffdcd7; }
+                    .hljs-addition { background: #04260f; color: #aff5b4; }
                 }
                 
                 #root ul, #root ol {
@@ -576,6 +602,30 @@ struct StreamdownWebView: UIViewRepresentable {
         private func notifyContentReady() {
             DispatchQueue.main.async {
                 self.isReadyBinding.wrappedValue = true
+                
+                // 延迟注入增强 CSS（内容已显示，此时加载不会阻塞渲染）
+                self.injectEnhancedCSSDeferred()
+            }
+        }
+        
+        /// 延迟注入增强 CSS 样式
+        private func injectEnhancedCSSDeferred() {
+            guard let webView = webView else { return }
+            
+            // 延迟 100ms 后注入，确保基础内容已完全渲染
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self, weak webView] in
+                guard let webView = webView else { return }
+                
+                if let cssScript = StreamdownWebViewPool.shared.getDeferredCSSScript() {
+                    webView.evaluateJavaScript(cssScript) { _, error in
+                        if let error = error {
+                            print("[StreamdownWebView] Failed to inject enhanced CSS: \(error)")
+                        } else {
+                            // CSS 注入后可能改变高度，重新获取
+                            self?.requestHeight(webView: webView)
+                        }
+                    }
+                }
             }
         }
         

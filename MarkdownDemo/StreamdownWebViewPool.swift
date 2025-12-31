@@ -23,9 +23,12 @@ final class StreamdownWebViewPool {
     
     // 缓存的资源（只读取一次）
     private var cachedJS: String?
-    private var cachedCSS: String?
+    private var cachedCSS: String?           // 延迟加载的增强 CSS
     private var cachedBaseURL: URL?
     private var cachedHTMLTemplate: String?
+    
+    // 标记是否使用轻量版本
+    private var isUsingVanillaBundle = false
     
     private init() {
         // 立即在后台加载资源缓存
@@ -118,10 +121,31 @@ final class StreamdownWebViewPool {
         return cachedJS
     }
     
-    /// 获取缓存的 CSS
+    /// 获取缓存的 CSS（用于延迟加载增强样式）
     func getCachedCSS() -> String? {
         ensureResourcesCached()
         return cachedCSS
+    }
+    
+    /// 获取延迟加载 CSS 的 JavaScript 代码
+    func getDeferredCSSScript() -> String? {
+        guard let css = cachedCSS else { return nil }
+        // 转义 CSS 中的特殊字符
+        let escapedCSS = css
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "")
+        return """
+        (function() {
+            if (window._enhancedCSSLoaded) return;
+            window._enhancedCSSLoaded = true;
+            var style = document.createElement('style');
+            style.id = 'enhanced-css';
+            style.textContent = '\(escapedCSS)';
+            document.head.appendChild(style);
+        })();
+        """
     }
     
     // MARK: - Private
@@ -181,20 +205,17 @@ final class StreamdownWebViewPool {
         }
     }
     
-    // 标记是否使用轻量版本（不需要外部 CSS）
-    private var isUsingVanillaBundle = false
-    
     private func loadBundledJS() -> String? {
-        // 优先使用 vanilla 版本（40KB，纯 JS，最快）
+        // 优先使用 vanilla 版本（168KB，纯 JS + highlight.js，最快）
         if let path = Bundle.main.path(forResource: "streamdown-vanilla", ofType: "js", inDirectory: "StreamdownBundle"),
            let content = try? String(contentsOfFile: path, encoding: .utf8) {
-            print("[StreamdownPool] Using vanilla bundle (40KB)")
+            print("[StreamdownPool] Using vanilla bundle (168KB, with syntax highlighting)")
             isUsingVanillaBundle = true
             return content
         }
         if let path = Bundle.main.path(forResource: "streamdown-vanilla", ofType: "js"),
            let content = try? String(contentsOfFile: path, encoding: .utf8) {
-            print("[StreamdownPool] Using vanilla bundle (40KB)")
+            print("[StreamdownPool] Using vanilla bundle (168KB, with syntax highlighting)")
             isUsingVanillaBundle = true
             return content
         }
@@ -228,16 +249,15 @@ final class StreamdownWebViewPool {
     }
     
     private func loadBundledCSS() -> String? {
-        // vanilla/lite 版本使用内联 CSS，不需要加载 1.4MB 的外部 CSS
-        if isUsingVanillaBundle {
-            return nil
-        }
+        // 始终加载增强 CSS，用于延迟注入
         if let path = Bundle.main.path(forResource: "streamdown-bundle", ofType: "css", inDirectory: "StreamdownBundle"),
            let content = try? String(contentsOfFile: path, encoding: .utf8) {
+            print("[StreamdownPool] Enhanced CSS loaded for deferred injection (1.4MB)")
             return content
         }
         if let path = Bundle.main.path(forResource: "streamdown-bundle", ofType: "css"),
            let content = try? String(contentsOfFile: path, encoding: .utf8) {
+            print("[StreamdownPool] Enhanced CSS loaded for deferred injection (1.4MB)")
             return content
         }
         return nil
@@ -245,7 +265,6 @@ final class StreamdownWebViewPool {
     
     private func generateEmptyHTML() -> String {
         let jsTag: String
-        let cssTag: String
         
         if let js = cachedJS {
             jsTag = "<script>\(js)</script>"
@@ -253,11 +272,8 @@ final class StreamdownWebViewPool {
             jsTag = "<script src=\"streamdown-bundle.js\"></script>"
         }
         
-        if let css = cachedCSS {
-            cssTag = "<style>\(css)</style>"
-        } else {
-            cssTag = "<link rel=\"stylesheet\" href=\"streamdown-bundle.css\">"
-        }
+        // 不在初始 HTML 中加载外部 CSS，使用内联基础样式快速显示
+        // 增强 CSS 将通过 JavaScript 延迟注入
         
         return """
         <!DOCTYPE html>
@@ -266,7 +282,6 @@ final class StreamdownWebViewPool {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <title>Streamdown</title>
-            \(cssTag)
             <style>
                 * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
                 :root { color-scheme: light dark; }
@@ -291,6 +306,41 @@ final class StreamdownWebViewPool {
                 #root pre { background: #f4f4f4; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 0.8em 0; font-size: 0.85em; }
                 @media (prefers-color-scheme: dark) { #root pre { background: #1e1e1e; } }
                 #root pre code { background: transparent; padding: 0; }
+                /* highlight.js theme - GitHub-like */
+                .hljs { display: block; overflow-x: auto; color: #24292e; }
+                .hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }
+                .hljs-keyword, .hljs-selector-tag { color: #d73a49; font-weight: 600; }
+                .hljs-literal, .hljs-number, .hljs-tag .hljs-attr { color: #005cc5; }
+                .hljs-string, .hljs-doctag, .hljs-regexp { color: #032f62; }
+                .hljs-title, .hljs-section, .hljs-selector-id { color: #6f42c1; font-weight: 600; }
+                .hljs-subst { color: #24292e; font-weight: normal; }
+                .hljs-type, .hljs-class .hljs-title { color: #6f42c1; }
+                .hljs-variable, .hljs-template-variable { color: #e36209; }
+                .hljs-name, .hljs-attribute { color: #22863a; }
+                .hljs-symbol, .hljs-bullet, .hljs-link { color: #005cc5; }
+                .hljs-built_in, .hljs-builtin-name { color: #005cc5; }
+                .hljs-meta { color: #6a737d; font-weight: 600; }
+                .hljs-deletion { background: #ffeef0; color: #b31d28; }
+                .hljs-addition { background: #e6ffed; color: #22863a; }
+                .hljs-emphasis { font-style: italic; }
+                .hljs-strong { font-weight: bold; }
+                @media (prefers-color-scheme: dark) {
+                    .hljs { color: #c9d1d9; }
+                    .hljs-comment, .hljs-quote { color: #8b949e; }
+                    .hljs-keyword, .hljs-selector-tag { color: #ff7b72; }
+                    .hljs-literal, .hljs-number, .hljs-tag .hljs-attr { color: #79c0ff; }
+                    .hljs-string, .hljs-doctag, .hljs-regexp { color: #a5d6ff; }
+                    .hljs-title, .hljs-section, .hljs-selector-id { color: #d2a8ff; }
+                    .hljs-subst { color: #c9d1d9; }
+                    .hljs-type, .hljs-class .hljs-title { color: #d2a8ff; }
+                    .hljs-variable, .hljs-template-variable { color: #ffa657; }
+                    .hljs-name, .hljs-attribute { color: #7ee787; }
+                    .hljs-symbol, .hljs-bullet, .hljs-link { color: #79c0ff; }
+                    .hljs-built_in, .hljs-builtin-name { color: #79c0ff; }
+                    .hljs-meta { color: #8b949e; }
+                    .hljs-deletion { background: #490202; color: #ffdcd7; }
+                    .hljs-addition { background: #04260f; color: #aff5b4; }
+                }
                 #root ul, #root ol { padding-left: 1.5em; margin: 0.8em 0; }
                 #root li { margin: 0.3em 0; }
                 #root blockquote { border-left: 4px solid #ddd; margin: 0.8em 0; padding-left: 1em; color: #666; }
